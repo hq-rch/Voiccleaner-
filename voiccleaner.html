@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Omni Voice Cleaner | badag007</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background: #111827; color: white; display: flex; flex-direction: column; align-items: center; padding: 20px; min-height: 100vh; justify-content: center; margin: 0; }
+        .container { background: #1f2937; padding: 30px; border-radius: 16px; box-shadow: 0 8px 30px rgba(0,0,0,0.8); width: 100%; max-width: 420px; text-align: center; border-top: 4px solid #f59e0b; }
+        h2 { color: #f59e0b; margin-top: 0; margin-bottom: 5px; font-size: 24px; font-weight: 900; }
+        .subtitle { font-size: 13px; color: #9ca3af; margin-bottom: 25px; }
+        
+        .upload-area { border: 2px dashed #4b5563; padding: 25px 15px; border-radius: 12px; margin-bottom: 15px; cursor: pointer; background: #374151; transition: 0.3s; }
+        .upload-area:hover { border-color: #f59e0b; background: #4b5563; }
+        input[type="file"] { display: none; }
+        #info-upload { margin: 0; font-size: 15px; font-weight: 500; color: #d1d5db; }
+        
+        button { padding: 14px; border: none; border-radius: 8px; background: #f59e0b; color: #111827; font-weight: bold; cursor: pointer; width: 100%; font-size: 15px; transition: 0.2s; }
+        button:disabled { background: #374151; color: #9ca3af; cursor: not-allowed; }
+        button:not(:disabled):hover { background: #fbbf24; }
+        button:not(:disabled):active { transform: scale(0.98); }
+        
+        #loading { display: none; margin: 15px 0; color: #34d399; font-size: 14px; font-weight: bold; animation: pulse 1s infinite alternate; }
+        @keyframes pulse { from { opacity: 0.5; } to { opacity: 1; } }
+
+        #result-area { display: none; margin-top: 20px; text-align: left; background: #111827; padding: 15px; border-radius: 8px; border: 1px solid #374151; }
+        label { font-size: 12px; color: #9ca3af; font-weight: bold; margin-bottom: 8px; display: block; }
+        
+        audio { width: 100%; height: 40px; outline: none; margin-bottom: 15px; }
+
+        .dl-btn { background: #10b981; text-decoration: none; display: block; padding: 12px; border-radius: 8px; color: white; font-weight: bold; font-size: 15px; width: 100%; box-sizing: border-box; transition: 0.2s; text-align: center; }
+        .dl-btn:hover { background: #059669; }
+
+        .saweria-btn { background: #faae2b; text-decoration: none; display: block; padding: 12px; border-radius: 8px; color: #111827; margin-top: 25px; font-weight: 900; font-size: 14px; width: 100%; box-sizing: border-box; transition: 0.2s; border: 2px solid #e09922; text-align: center; }
+        .saweria-btn:hover { background: #ffbd4a; transform: translateY(-2px); }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>Studio Voice Cleaner</h2>
+    <div class="subtitle">Bikin Suara Mic HP Jadi Kayak Podcast Pro</div>
+
+    <div class="upload-area" onclick="document.getElementById('fileInput').click()">
+        <p id="info-upload">🎙️ Pilih Rekaman Suara / Video</p>
+        <input type="file" id="fileInput" accept="audio/*,video/*" onchange="fileSelected(this)">
+    </div>
+
+    <button onclick="processAudio()" id="btn-process" disabled>Bersihkan Suara Sekarang</button>
+    
+    <div id="loading">⏳ Menyulap audio jadi ala studio...</div>
+
+    <div id="result-area">
+        <label>Hasil Audio (Sudah di-Compress & Filter):</label>
+        <audio id="audio-player" controls></audio>
+        <a id="download-link" class="dl-btn" href="#" download="omni-podcast-clean.wav">⬇️ Download Audio (.WAV)</a>
+    </div>
+
+    <a href="https://saweria.co/badag007" target="_blank" class="saweria-btn">☕ Support badag007 di Saweria</a>
+</div>
+
+<script>
+    let audioContext;
+
+    function fileSelected(input) {
+        if (input.files && input.files[0]) {
+            let fileName = input.files[0].name;
+            if(fileName.length > 25) fileName = fileName.substring(0, 22) + '...';
+            document.getElementById('info-upload').innerText = '📁 ' + fileName;
+            document.getElementById('btn-process').disabled = false;
+            document.getElementById('result-area').style.display = 'none';
+        }
+    }
+
+    async function processAudio() {
+        const fileInput = document.getElementById('fileInput');
+        const btnProcess = document.getElementById('btn-process');
+        const loadingDiv = document.getElementById('loading');
+        
+        if (!fileInput.files[0]) return;
+
+        btnProcess.disabled = true;
+        loadingDiv.style.display = "block";
+        document.getElementById('result-area').style.display = 'none';
+
+        try {
+            // 1. Setup Audio Context
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const arrayBuffer = await fileInput.files[0].arrayBuffer();
+            const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+            
+            // 2. Setup Offline Context untuk Rendering secepat kilat
+            const offlineCtx = new OfflineAudioContext(
+                audioBuffer.numberOfChannels, 
+                audioBuffer.length, 
+                audioBuffer.sampleRate
+            );
+            
+            const source = offlineCtx.createBufferSource();
+            source.buffer = audioBuffer;
+
+            // 3. EFEK 1: High-Pass Filter (Motong suara rumble AC/Kipas di bawah 85Hz)
+            const highpassFilter = offlineCtx.createBiquadFilter();
+            highpassFilter.type = "highpass";
+            highpassFilter.frequency.value = 85; 
+
+            // 4. EFEK 2: Peaking EQ (Bikin suara vokal lebih renyah di area 3.5kHz)
+            const presenceEq = offlineCtx.createBiquadFilter();
+            presenceEq.type = "peaking";
+            presenceEq.frequency.value = 3500;
+            presenceEq.Q.value = 1;
+            presenceEq.gain.value = 4; // Angkat 4dB biar vokalnya nonjol
+
+            // 5. EFEK 3: Studio Compressor (Ratakan volume, yang pelan jadi keras, yang teriak ditekan)
+            const compressor = offlineCtx.createDynamicsCompressor();
+            compressor.threshold.value = -24; // Mulai nge-press di -24dB
+            compressor.knee.value = 30;
+            compressor.ratio.value = 4;       // Ratio standar vokal
+            compressor.attack.value = 0.005;  // Respons lumayan cepat
+            compressor.release.value = 0.25;  // Lepas natural
+
+            // 6. EFEK 4: Gain Booster (Naikin volume total setelah di compress)
+            const makeUpGain = offlineCtx.createGain();
+            makeUpGain.gain.value = 2.5; // Naikin volume keseluruhan
+
+            // Sambung-menyambung menjadi satu
+            source.connect(highpassFilter);
+            highpassFilter.connect(presenceEq);
+            presenceEq.connect(compressor);
+            compressor.connect(makeUpGain);
+            makeUpGain.connect(offlineCtx.destination);
+
+            source.start(0);
+            
+            // 7. Render Audio
+            const renderedBuffer = await offlineCtx.startRendering();
+            
+            // 8. Convert ke file WAV
+            const wavBlob = bufferToWave(renderedBuffer, renderedBuffer.length);
+            const audioUrl = URL.createObjectURL(wavBlob);
+
+            // Tampilkan ke Player dan Siapkan Download
+            document.getElementById('audio-player').src = audioUrl;
+            document.getElementById('download-link').href = audioUrl;
+            document.getElementById('result-area').style.display = "block";
+
+        } catch (error) {
+            console.error(error);
+            alert("Gagal memproses audio. Pastikan file yang diupload ga rusak bray.");
+        } finally {
+            loadingDiv.style.display = "none";
+            btnProcess.disabled = false;
+        }
+    }
+
+    // Fungsi konversi AudioBuffer jadi format WAV File (Pure JS)
+    function bufferToWave(abuffer, len) {
+        let numOfChan = abuffer.numberOfChannels,
+            length = len * numOfChan * 2 + 44,
+            buffer = new ArrayBuffer(length),
+            view = new DataView(buffer),
+            channels = [], i, sample,
+            offset = 0, pos = 0;
+
+        function setUint16(data) { view.setUint16(pos, data, true); pos += 2; }
+        function setUint32(data) { view.setUint32(pos, data, true); pos += 4; }
+
+        setUint32(0x46464952); // "RIFF"
+        setUint32(length - 8); // file length
+        setUint32(0x45564157); // "WAVE"
+
+        setUint32(0x20746d66); // "fmt " chunk
+        setUint32(16); // length = 16
+        setUint16(1); // PCM
+        setUint16(numOfChan);
+        setUint32(abuffer.sampleRate);
+        setUint32(abuffer.sampleRate * 2 * numOfChan); // avg. bytes/sec
+        setUint16(numOfChan * 2); // block-align
+        setUint16(16); // 16-bit
+
+        setUint32(0x61746164); // "data" - chunk
+        setUint32(length - pos - 4); // chunk length
+
+        for(i = 0; i < abuffer.numberOfChannels; i++) channels.push(abuffer.getChannelData(i));
+
+        while(pos < length) {
+            for(i = 0; i < numOfChan; i++) {
+                sample = Math.max(-1, Math.min(1, channels[i][offset])); 
+                sample = (0.5 + sample < 0 ? sample * 32768 : sample * 32767) | 0;
+                view.setInt16(pos, sample, true); 
+                pos += 2;
+            }
+            offset++;
+        }
+        return new Blob([buffer], {type: "audio/wav"});
+    }
+</script>
+
+</body>
+</html>
